@@ -8,7 +8,7 @@ import re
 
 sys.path.insert(0, os.getcwd())
 filename_prefix = "NVC"
-name = "Hobb Filth"
+name = "Tinsai Retsener"
 xml_file = name + ".xml"
 pdf_file = "Blank_Character_Sheet.pdf"
 tmp_file = "tmp.fdf"
@@ -17,6 +17,7 @@ player_name = 'CodedWrench'
 alignment = 'Chaotic Good'
 armor = 0
 armor_type = 0
+speed = 0
 
 spell_mapping =  \
     [["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018", "Spells 1019", "Spells 1020", "Spells 1021", "Spells 1022"],
@@ -30,8 +31,10 @@ spell_mapping =  \
      ["Spells 10101", "Spells 10100", "Spells 10102", "Spells 10103", "Spells 10104", "Spells 10105", "Spells 10106"],
      ["Spells 10108", "Spells 10107", "Spells 10109", "Spells 101010", "Spells 101011", "Spells 101012", "Spells 101013"]] 
 
+# Level 0 is cantrips so that doesn't have slots
 spell_slot_mapping = \
-    ["SlotsTotal 19",
+    ["Non-existent",
+     "SlotsTotal 19",
      "SlotsTotal 20", 
      "SlotsTotal 21", 
      "SlotsTotal 22", 
@@ -45,7 +48,8 @@ def add_xml_data(field_name, xml_find_string):
   global fields, xml
   print(field_name)
   print(xml_find_string)
-  fields[field_name] = xml.find(xml_find_string).text
+  output = find_field_or_return_default(xml, xml_find_string, "")
+  fields[field_name] = output 
 
 def add_custom_data(field_name, data):
   global fields
@@ -67,15 +71,10 @@ def character_info(xml):
   add_custom_data('Alignment',alignment)
 
 def background_info(xml):
-  personality = xml.find('./character/background/personality')
-  ideals = xml.find('./character/background/ideals')
-  bonds = xml.find('./character/background/bonds')
-  flaws = xml.find('./character/background/flaws')
-
-  personality = (personality.text if personality is not None else '')
-  ideals = (ideals.text if ideals is not None else '')
-  bonds = (bonds.text if bonds is not None else '')
-  flaws = (flaws.text if flaws is not None else '')
+  personality = find_field_or_return_default(xml, './character/background/personality', "")
+  ideals = find_field_or_return_default(xml, './character/background/ideals', "")
+  bonds = find_field_or_return_default(xml, './character/background/bonds', "")
+  flaws = find_field_or_return_default(xml, './character/background/flaws', "")
       
   add_custom_data('PersonalityTraits ', personality)
   add_custom_data('Ideals', ideals)
@@ -92,16 +91,18 @@ def background_info(xml):
 
 
 def combat_info(xml,ability_modifiers):
+  global speed
   add_custom_data('Initiative', ('+' if int(ability_modifiers[1]) >= 0 else '') + str(ability_modifiers[1]))
-  #hack: speed is not included if default (30 ft)
-  add_custom_data('Speed', '30 ft')
+  speed = find_field_or_return_default(xml, './character/race/speed', "30")
+  add_custom_data('Speed', speed + ' ft')
 
 def ability_scores_and_modifiers(xml):
   abilities = xml.find('./character/abilities').text.split(',')
   ability_modifiers = []
-  race_modifiers = xml.findall('./character/race/mod') + xml.findall('./character/race/feat/mod')
+  race_and_class_modifiers = xml.findall('./character/race/mod') + xml.findall('./character/race/feat/mod') + \
+          xml.findall('./character/class/mod') + xml.findall('./character/class/feat/mod')
 
-  for mod in race_modifiers:
+  for mod in race_and_class_modifiers:
     if mod.find('category').text == '1':
       # hack: Strength missing <type> node
       mod_index = int(mod.find('type').text) if not mod.find('type') == None else 0
@@ -201,19 +202,19 @@ def saving_throws(ability_modifiers,proficiency_modifier):
 
 def features_and_traits(xml):
   # Feat+Traits - page 2
-  age = xml.find('./character/race/age')
-  height = xml.find('./character/race/height')
-  weight = xml.find('./character/race/weight')
-  eyes = xml.find('./character/race/eyes')
-  skin = xml.find('./character/race/skin')
-  hair = xml.find('./character/race/hair')
-      
-  add_custom_data('Age', age.text)
-  add_custom_data('Height', height.text)
-  add_custom_data('Weight', weight.text)
-  add_custom_data('Eyes', eyes.text)
-  add_custom_data('Skin', skin.text)
-  add_custom_data('Hair', hair.text)
+  age = find_field_or_return_default(xml, './character/race/age', "")
+  height = find_field_or_return_default(xml, './character/race/height', "")
+  weight = find_field_or_return_default(xml, './character/race/weight', "")
+  eyes = find_field_or_return_default(xml, './character/race/eyes', "")
+  skin = find_field_or_return_default(xml, './character/race/skin', "")
+  hair = find_field_or_return_default(xml, './character/race/hair', "")
+
+  add_custom_data('Age', age)
+  add_custom_data('Height', height)
+  add_custom_data('Weight', weight)
+  add_custom_data('Eyes', eyes)
+  add_custom_data('Skin', skin)
+  add_custom_data('Hair', hair)
 
   all_speed_modifier = 0
   speed_change_applied = False
@@ -226,12 +227,12 @@ def features_and_traits(xml):
     # speed modifiers
     mods = feat.findall('mod')
     for mod in mods:
-        mod_type = mod.find('type')
-        if mod_type is not None and mod_type.text == '13':
+        mod_type = find_field_or_return_default(mod, 'type', "")
+        if mod_type == '13':
             all_speed_modifier += int(mod.find('value').text)
 
   if (all_speed_modifier > 0):
-      add_custom_data('Speed', "{} ft".format(30 + all_speed_modifier))
+      add_custom_data('Speed', "{} ft".format(speed + all_speed_modifier))
 
   for feat in feats:
     # hack: speed feats
@@ -267,8 +268,14 @@ def index_to_weapon_fields(index):
     elif index == 2: 
         return ["Wpn Name 3", "Wpn3 Damage ", "Wpn3 AtkBonus  "]
 
+def find_field_or_return_default(item, field, default):
+    output = item.find(field)
+    output = (output.text if output is not None else default)
+    return output
 
 def treasure(xml, ability_modifiers, proficiency_modifier):
+  global armor
+
   # Treasure - page 2
   item_text = ''
   ammunition_text = ''
@@ -283,22 +290,18 @@ def treasure(xml, ability_modifiers, proficiency_modifier):
 
       # hack: money
       if item.find('name').text == "Copper (cp)":
-        add_custom_data('CP',item.find('quantity').text)
+        add_custom_data('CP', find_field_or_return_default(item, 'quantity', '1'))
       elif item.find('name').text == "Silver (sp)":
-        add_custom_data('SP',item.find('quantity').text)
+        add_custom_data('SP', find_field_or_return_default(item, 'quantity', '1'))
       elif item.find('name').text == "Electrum (ep)":
-        add_custom_data('EP',item.find('quantity').text)
+        add_custom_data('EP', find_field_or_return_default(item, 'quantity', '1'))
       elif item.find('name').text == "Gold (gp)":
-        add_custom_data('GP',item.find('quantity').text)
+        add_custom_data('GP', find_field_or_return_default(item, 'quantity', '1'))
       elif item.find('name').text == "Platinum (pp)":
-        add_custom_data('PP',item.find('quantity').text)
+        add_custom_data('PP', find_field_or_return_default(item, 'quantity', '1'))
       # Equipped ammunition
       elif slot is not None and slot.text == '1':
-        item_amount = item.find('quantity')
-        if item_amount is not None:
-            item_amount = item_amount.text
-        else:
-            item_amount = '1'
+        item_amount = find_field_or_return_default(item, 'quantity', '1')
 
         if int(item_amount) > 1:
             ammunition_text += "({}x) ".format(item_amount) 
@@ -310,7 +313,6 @@ def treasure(xml, ability_modifiers, proficiency_modifier):
         weapon_text = ''
         damage_text = ''
         attack_bonus_text = ''
-        item_amount = item.find('quantity')
 
         ## Attack Bonus
         # TODO: Take weapon proficiency into account?
@@ -346,10 +348,7 @@ def treasure(xml, ability_modifiers, proficiency_modifier):
             damage_text += "/" + long_range.text
 
         ## Amount
-        if item_amount is not None:
-            item_amount = item_amount.text
-        else:
-            item_amount = '1'
+        item_amount = find_field_or_return_default(item, 'quantity', '1')
 
         if int(item_amount) > 1:
             weapon_text += "({}x) ".format(item_amount) 
@@ -361,21 +360,19 @@ def treasure(xml, ability_modifiers, proficiency_modifier):
         add_custom_data(weapon_pdf_fields[2],attack_bonus_text.strip())
 
         weapon_index += 1
+      # Equipped shield
+      elif slot is not None and slot.text == '4':
+        armor_text += item.find('name').text  + ", "
+        armor += int(item.find('ac').text)
       # Equipped armor
       elif slot is not None and slot.text == '5':
         armor_text += item.find('name').text  + ", "
-        global armor
-        armor = int(item.find('ac').text)
+        armor += int(item.find('ac').text)
         global armor_type
         armor_type = int(item.find('type').text)
 
       else:
-        item_amount = item.find('quantity')
-        if item_amount is not None:
-            item_amount = item_amount.text
-        else:
-            item_amount = '1'
-
+        item_amount = find_field_or_return_default(item, 'quantity', '1')
         if int(item_amount) > 1:
             item_text += "({}x) ".format(item_amount) 
         item_text += item.find('name').text  + ", "
@@ -469,8 +466,11 @@ def spells(xml, ability_modifiers, proficiency_modifier):
 
     spell_count = [0] * len(spell_mapping)
     for spell in spells:
-        level = spell.find('level')
-        level = (int(level.text) if level is not None else 0)
+        # Found a weird bug in one of the sheets where there was a stray </spell> 
+        if spell.find('name') is None:
+            continue
+
+        level = int(find_field_or_return_default(spell, 'level', '0'))
         name = spell.find('name').text
 
         v = 'V' if spell.find('v') is not None else ''
