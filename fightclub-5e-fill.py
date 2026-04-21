@@ -99,7 +99,7 @@ def combat_info(xml,ability_modifiers):
 def ability_scores_and_modifiers(xml):
   abilities = xml.find('./character/abilities').text.split(',')
   ability_modifiers = []
-  race_modifiers = xml.findall('./character/race/mod')
+  race_modifiers = xml.findall('./character/race/mod') + xml.findall('./character/race/feat/mod')
 
   for mod in race_modifiers:
     if mod.find('category').text == '1':
