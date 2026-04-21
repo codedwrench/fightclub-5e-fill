@@ -18,6 +18,29 @@ alignment = 'Chaotic Good'
 armor = 0
 armor_type = 0
 
+spell_mapping =  \
+    [["Spells 1014", "Spells 1016", "Spells 1017", "Spells 1018", "Spells 1019", "Spells 1020", "Spells 1021", "Spells 1022"],
+     ["Spells 1015", "Spells 1023", "Spells 1024", "Spells 1025", "Spells 1026", "Spells 1027", "Spells 1028", "Spells 1029", "Spells 1030", "Spells 1031", "Spells 1032", "Spells 1033"],
+     ["Spells 1046", "Spells 1034", "Spells 1035", "Spells 1036", "Spells 1037", "Spells 1038", "Spells 1039", "Spells 1040", "Spells 1041", "Spells 1042", "Spells 1043", "Spells 1044", "Spells 1045"],
+     ["Spells 1048", "Spells 1047", "Spells 1049", "Spells 1050", "Spells 1051", "Spells 1052", "Spells 1053", "Spells 1054", "Spells 1055", "Spells 1056", "Spells 1057", "Spells 1058", "Spells 1059"],
+     ["Spells 1061", "Spells 1060", "Spells 1062", "Spells 1063", "Spells 1064", "Spells 1065", "Spells 1066", "Spells 1067", "Spells 1068", "Spells 1069", "Spells 1070", "Spells 1071", "Spells 1072"],
+     ["Spells 1074", "Spells 1073", "Spells 1075", "Spells 1076", "Spells 1077", "Spells 1078", "Spells 1079", "Spells 1080", "Spells 1081"],
+     ["Spells 1083", "Spells 1082", "Spells 1084", "Spells 1085", "Spells 1086", "Spells 1087", "Spells 1088", "Spells 1089", "Spells 1090"],
+     ["Spells 1092", "Spells 1091", "Spells 1093", "Spells 1094", "Spells 1095", "Spells 1096", "Spells 1097", "Spells 1098", "Spells 1099"],
+     ["Spells 10101", "Spells 10100", "Spells 10102", "Spells 10103", "Spells 10104", "Spells 10105", "Spells 10106"],
+     ["Spells 10108", "Spells 10107", "Spells 10109", "Spells 101010", "Spells 101011", "Spells 101012", "Spells 101013"]] 
+
+spell_slot_mapping = \
+    ["SlotsTotal 19",
+     "SlotsTotal 20", 
+     "SlotsTotal 21", 
+     "SlotsTotal 22", 
+     "SlotsTotal 23", 
+     "SlotsTotal 24", 
+     "SlotsTotal 25", 
+     "SlotsTotal 26", 
+     "SlotsTotal 27"]
+
 def add_xml_data(field_name, xml_find_string):
   global fields, xml
   print(field_name)
@@ -216,7 +239,6 @@ def features_and_traits(xml):
       # Group 1 captures words that end double-letter ing, group 3 captures words that just end in ing
       speed_type = re.findall(r'([a-z]*([a-z]))\2{1}ing|([a-z]*)ing',feat.find('text').text)
       append_custom_data('Speed',str(int(re.findall(r"[0-9]+",feat.find('text').text)[0]) + all_speed_modifier) +'ft (' + (speed_type[0][0] if speed_type[0][0] else speed_type[0][2]) + ')',' /\r\n')
-      speed_change_applied = True
 
     # hack: language proficiencies
     elif 'Languages' in feat.find('name').text:
@@ -423,11 +445,56 @@ def hit_die(xml):
     add_custom_data('HDTotal', hit_die_text.strip())
 
 
+def ability_index_to_name(index):
+    ability_fields = ('Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma')
+    return ability_fields[index]
+
+
+def spells(xml, ability_modifiers, proficiency_modifier):
+    # TODO: Multiclass and racial spells
+    spell_ability_index = xml.find('./character/class/spellAbility')
+    if spell_ability_index is not None:
+        spell_class = xml.find('./character/class/name').text
+        spell_ability = ability_index_to_name(int(spell_ability_index.text))
+        add_custom_data('Spellcasting Class 2', spell_class)
+        add_custom_data('SpellcastingAbility 2', spell_ability)
+
+        spell_attack_bonus = int(ability_modifiers[int(spell_ability_index.text)] + proficiency_modifier)
+        add_custom_data('SpellAtkBonus 2', spell_attack_bonus)
+
+        spell_save_dc = 8 + int(ability_modifiers[int(spell_ability_index.text)] + proficiency_modifier)
+        add_custom_data('SpellSaveDC  2', spell_save_dc)
+
+    spells = xml.findall('./character/class/spell') + xml.findall('./character/race/spell')
+
+    spell_count = [0] * len(spell_mapping)
+    for spell in spells:
+        level = spell.find('level')
+        level = (int(level.text) if level is not None else 0)
+        name = spell.find('name').text
+
+        v = 'V' if spell.find('v') is not None else ''
+        s = 'S' if spell.find('s') is not None else ''
+        m = 'M' if spell.find('m') is not None else ''
+        
+        add_custom_data(spell_mapping[level][spell_count[level]], "{} ({}{}{})".format(name, v, s, m))
+        spell_count[level] += 1
+
+    slots = xml.find('./character/slots').text.split(',')
+    level = 0
+    for slot in slots:
+        # This sheet only goes up to lv 8
+        if (slot != '' and int(slot) > 0 and level <= 8):
+          add_custom_data(spell_slot_mapping[level], slot)
+          level += 1
+
+
 def simple_fields(xml):
   with open('simple-field-mapping.csv', newline='') as csvfile:
     spamreader = csv.DictReader(csvfile, delimiter=',', quotechar='|')
     for row in spamreader:
       add_xml_data(row['field'], row['path'])
+
 
 def process_xml(file):
   global fields, xml, level
@@ -455,6 +522,7 @@ def process_xml(file):
   treasure(xml, ability_modifiers, proficiency_modifier)
   armor_class(xml, ability_modifiers)
   hit_die(xml)
+  spells(xml, ability_modifiers, proficiency_modifier)
 
 
 def form_fill(fields):
