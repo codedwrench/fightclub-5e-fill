@@ -48,11 +48,16 @@ def background_info(xml):
   ideals = xml.find('./character/background/ideals')
   bonds = xml.find('./character/background/bonds')
   flaws = xml.find('./character/background/flaws')
+
+  personality = (personality.text if personality is not None else '')
+  ideals = (ideals.text if ideals is not None else '')
+  bonds = (bonds.text if bonds is not None else '')
+  flaws = (flaws.text if flaws is not None else '')
       
-  add_custom_data('PersonalityTraits ', personality.text)
-  add_custom_data('Ideals', ideals.text)
-  add_custom_data('Bonds', bonds.text)
-  add_custom_data('Flaws', flaws.text)
+  add_custom_data('PersonalityTraits ', personality)
+  add_custom_data('Ideals', ideals)
+  add_custom_data('Bonds', bonds)
+  add_custom_data('Flaws', flaws)
 
   feats = xml.findall('./character/background/feat')
   feats_text = ""
@@ -187,14 +192,31 @@ def features_and_traits(xml):
   add_custom_data('Skin', skin.text)
   add_custom_data('Hair', hair.text)
 
+  all_speed_modifier = 0
+  speed_change_applied = False
+
   feat_text = ''
-  feats = xml.findall('./character/class/feat') + xml.findall('./character/race/feat')
+  feats = xml.findall('./character/class/feat') + xml.findall('./character/feat') + xml.findall('./character/race/feat')
+
+  # Double loop this because we need this info in the next loop
+  for feat in feats:
+    # speed modifiers
+    mods = feat.findall('mod')
+    for mod in mods:
+        mod_type = mod.find('type')
+        if mod_type is not None and mod_type.text == '13':
+            all_speed_modifier += int(mod.find('value').text)
+
+  if (all_speed_modifier > 0):
+      add_custom_data('Speed', "{} ft".format(30 + all_speed_modifier))
+
   for feat in feats:
     # hack: speed feats
     if 'Speed' in feat.find('name').text:
       # Group 1 captures words that end double-letter ing, group 3 captures words that just end in ing
       speed_type = re.findall(r'([a-z]*([a-z]))\2{1}ing|([a-z]*)ing',feat.find('text').text)
-      append_custom_data('Speed',re.findall(r"[0-9]+",feat.find('text').text)[0] +'ft (' + (speed_type[0][0] if speed_type[0][0] else speed_type[0][2]) + ')',' /\r\n')
+      append_custom_data('Speed',str(int(re.findall(r"[0-9]+",feat.find('text').text)[0]) + all_speed_modifier) +'ft (' + (speed_type[0][0] if speed_type[0][0] else speed_type[0][2]) + ')',' /\r\n')
+      speed_change_applied = True
 
     # hack: language proficiencies
     elif 'Languages' in feat.find('name').text:
@@ -203,27 +225,120 @@ def features_and_traits(xml):
     else:
       feat_text+= feat.find('name').text + ':\r\n' + feat.find('text').text.replace('•','\r\n•')+"\r\n"
 
+
   add_custom_data('Features and Traits',feat_text.strip())
 
-def treasure(xml):
+def damage_type_num_to_text(damage_type):
+    # TODO: Find out what the other types are
+    if damage_type == 1:
+        return "B"
+    if damage_type == 2:
+        return "P"
+    if damage_type == 3:
+        return "S"
+
+def index_to_weapon_fields(index):
+    if index == 0: 
+        return ["Wpn Name", "Wpn1 Damage", "Wpn1 AtkBonus"]
+    elif index == 1: 
+        return ["Wpn Name 2", "Wpn2 Damage ", "Wpn2 AtkBonus "]
+    elif index == 2: 
+        return ["Wpn Name 3", "Wpn3 Damage ", "Wpn3 AtkBonus  "]
+
+
+def treasure(xml, ability_modifiers, proficiency_modifier):
   # Treasure - page 2
   item_text = ''
+  ammunition_text = ''
   armor_text = ''
+  equipment_text = ''
+  weapon_index = 0
+
   treasure = xml.findall('./character/item')
   for item in treasure:
       slot = item.find('slot')
+      damageType = item.find('damageType')
 
       # hack: money
       if item.find('name').text == "Copper (cp)":
         add_custom_data('CP',item.find('quantity').text)
-      if item.find('name').text == "Silver (sp)":
+      elif item.find('name').text == "Silver (sp)":
         add_custom_data('SP',item.find('quantity').text)
-      if item.find('name').text == "Electrum (ep)":
+      elif item.find('name').text == "Electrum (ep)":
         add_custom_data('EP',item.find('quantity').text)
       elif item.find('name').text == "Gold (gp)":
         add_custom_data('GP',item.find('quantity').text)
       elif item.find('name').text == "Platinum (pp)":
         add_custom_data('PP',item.find('quantity').text)
+      # Equipped ammunition
+      elif slot is not None and slot.text == '1':
+        item_amount = item.find('quantity')
+        if item_amount is not None:
+            item_amount = item_amount.text
+        else:
+            item_amount = '1'
+
+        if int(item_amount) > 1:
+            ammunition_text += "({}x) ".format(item_amount) 
+
+        ammunition_text += item.find('name').text  + ", "
+      # Weapon 
+      elif damageType is not None and weapon_index <= 2:
+        weapon_pdf_fields = index_to_weapon_fields(weapon_index)
+        weapon_text = ''
+        damage_text = ''
+        attack_bonus_text = ''
+        item_amount = item.find('quantity')
+
+        ## Attack Bonus
+        # TODO: Take weapon proficiency into account?
+        # Hack (Finesse, probably attainable in weaponProperty or something)
+        finesse = item.find('text').text.find("Finesse") != -1 
+        ranged_weapon = item.find('type').text == '6'
+        if (ranged_weapon):
+            skill_modifier = ability_modifiers[1]
+        elif (finesse):
+            skill_modifier = max(ability_modifiers[0], ability_modifiers[1])
+        else:
+            skill_modifier = ability_modifiers[0]
+
+        attack_bonus_text = "{0:+g}".format(skill_modifier + proficiency_modifier)
+
+        ## Damage
+        damage_1h = item.find('damage1H')
+        damage_2h = item.find('damage2H')
+        if damage_1h is not None:
+          damage_text += damage_1h.text
+        if damage_2h is not None:
+            damage_text += "/" + damage_2h.text
+
+        damage_text += "{0:+g}".format(skill_modifier)
+        damage_text += damage_type_num_to_text(int(item.find('damageType').text))
+
+        short_range = item.find('weaponRange')
+        long_range = item.find('weaponLongRange')
+
+        if short_range is not None:
+            damage_text += " "  + short_range.text
+        if long_range is not None:
+            damage_text += "/" + long_range.text
+
+        ## Amount
+        if item_amount is not None:
+            item_amount = item_amount.text
+        else:
+            item_amount = '1'
+
+        if int(item_amount) > 1:
+            weapon_text += "({}x) ".format(item_amount) 
+
+        weapon_text += item.find('name').text 
+
+        add_custom_data(weapon_pdf_fields[0],weapon_text.strip())
+        add_custom_data(weapon_pdf_fields[1],damage_text.strip())
+        add_custom_data(weapon_pdf_fields[2],attack_bonus_text.strip())
+
+        weapon_index += 1
       # Equipped armor
       elif slot is not None and slot.text == '5':
         armor_text += item.find('name').text  + ", "
@@ -246,7 +361,9 @@ def treasure(xml):
   item_text = item_text[:-2]
   armor_text = armor_text[:-2]
   add_custom_data('Treasure',item_text.strip())
-  add_custom_data('Equipment',armor_text.strip())
+
+  equipment_text = ammunition_text + armor_text 
+  add_custom_data('Equipment', equipment_text.strip())
 
 def armor_class(xml, ability_modifiers):
     # TODO: Shield
@@ -269,6 +386,42 @@ def armor_class(xml, ability_modifiers):
         armor_class = 10 + ability_modifiers[1]
 
     add_custom_data('AC', armor_class)
+
+
+def hit_die_type_to_dice_type(hit_die_type):
+    if hit_die_type == "2":
+        return "d8"
+    if hit_die_type == "3":
+        return "d10"
+    elif hit_die_type == "4":
+        return "d12"
+
+    return "d6"
+
+
+def hit_die(xml):
+    hit_die_text = ''
+
+    character_classes = xml.findall('./character/class')
+    for character_class in character_classes:
+        level = character_class.find('level')
+        hd = character_class.find('hd')
+
+        if hd == None:
+            hd = "1"
+        else:
+            hd = hd.text
+
+        if level == None:
+            level = "1"
+        else:
+            level = level.text
+
+        hit_die_text = level + hit_die_type_to_dice_type(hd) + " + "
+
+    hit_die_text = hit_die_text[:3]
+    add_custom_data('HDTotal', hit_die_text.strip())
+
 
 def simple_fields(xml):
   with open('simple-field-mapping.csv', newline='') as csvfile:
@@ -299,8 +452,9 @@ def process_xml(file):
   # TODO: Add all feats, not just first. Can work out how many per page based on length.
   # TODO: Calculate bonuses given from feats.
   features_and_traits(xml)
-  treasure(xml)
+  treasure(xml, ability_modifiers, proficiency_modifier)
   armor_class(xml, ability_modifiers)
+  hit_die(xml)
 
 
 def form_fill(fields):
