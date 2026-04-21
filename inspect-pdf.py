@@ -8,8 +8,8 @@ fp = open(filename, 'rb')
 
 parser = PDFParser(fp)
 doc = PDFDocument(parser)
-doc.initialize()    
-fields = resolve1(doc.catalog['AcroForm'])['Fields']
+parser.set_document(doc)
+fields = resolve1(resolve1(doc.catalog["AcroForm"])["Fields"])
 for i in fields:
     field = resolve1(i)
     name, value = field.get('T'), field.get('V')

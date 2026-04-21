@@ -8,16 +8,20 @@ import re
 
 sys.path.insert(0, os.getcwd())
 filename_prefix = "NVC"
-name = "Lophelios Cnidariath"
+name = "Hobb Filth"
 xml_file = name + ".xml"
 pdf_file = "Blank_Character_Sheet.pdf"
 tmp_file = "tmp.fdf"
 output_folder = './output/'
-player_name = 'George'
-alignment = 'Lawful Good'
+player_name = 'CodedWrench'
+alignment = 'Chaotic Good'
+armor = 0
+armor_type = 0
 
 def add_xml_data(field_name, xml_find_string):
   global fields, xml
+  print(field_name)
+  print(xml_find_string)
   fields[field_name] = xml.find(xml_find_string).text
 
 def add_custom_data(field_name, data):
@@ -40,24 +44,21 @@ def character_info(xml):
   add_custom_data('Alignment',alignment)
 
 def background_info(xml):
+  personality = xml.find('./character/background/personality')
+  ideals = xml.find('./character/background/ideals')
+  bonds = xml.find('./character/background/bonds')
+  flaws = xml.find('./character/background/flaws')
+      
+  add_custom_data('PersonalityTraits ', personality.text)
+  add_custom_data('Ideals', ideals.text)
+  add_custom_data('Bonds', bonds.text)
+  add_custom_data('Flaws', flaws.text)
 
   feats = xml.findall('./character/background/feat')
-
-  for feat in feats:
-    if feat.find('name').text == 'Personality Trait':
-      add_custom_data('PersonalityTraits ',feat.find('text').text)
-    if feat.find('name').text == 'Ideal':
-      add_custom_data('Ideals',feat.find('text').text)
-    if feat.find('name').text == 'Bond':
-      add_custom_data('Bonds',feat.find('text').text)
-    if feat.find('name').text == 'Flaw':
-      add_custom_data('Flaws',feat.find('text').text)
-
   feats_text = ""
-
   for feat in feats:
-    feats_text+= feat.find('name').text+"\r\n"
-    feats_text+= feat.find('text').text+"\r\n"
+    feats_text += feat.find('name').text+"\r\n"
+    feats_text += feat.find('text').text+"\r\n"
 
   add_custom_data('Feat+Traits',feats_text)
 
@@ -112,23 +113,32 @@ def skill_modifiers(ability_modifiers,proficiency_modifier):
   class_proficiencies = xml.findall('./character/class/proficiency')
   background_proficiencies = xml.findall('./character/background/proficiency')
   skill_modifiers = list(abilities_for_skills)
+  other_skill_modifiers = [0] * len(abilities_for_skills)
+
+  # Expertises for rogue (proficiency modifier gets added again to skill)
+  feat_skill_expertises = xml.findall('./character/class/feat/mod')
+  for skill_expertise in feat_skill_expertises:
+      if skill_expertise.find('category').text == '4':
+          skill = int(skill_expertise.find('type').text)
+          other_skill_modifiers[skill] += int(proficiency_modifier)
+
   filled = []
   for i in range(0,len(skills)):
     for proficiency in race_proficiencies:
       if int(proficiency.text) - 100 == i:
-        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier))
+        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier) + other_skill_modifiers[i])
         add_custom_data(skills[i], ('+' if int(skill_modifiers[i]) >= 0 else '') + skill_modifiers[i])
         add_custom_data('Check Box ' + str(i+23),'Yes')
         filled.append(i)
     for proficiency in class_proficiencies:
       if int(proficiency.text) - 100 == i:
-        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier))
+        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier) + other_skill_modifiers[i])
         add_custom_data(skills[i], ('+' if int(skill_modifiers[i]) >= 0 else '') + skill_modifiers[i])        
         add_custom_data('Check Box ' + str(i+23),'Yes')
         filled.append(i)
     for proficiency in background_proficiencies:
       if int(proficiency.text) - 100 == i:
-        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier))
+        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + int(proficiency_modifier) + other_skill_modifiers[i])
         add_custom_data(skills[i], ('+' if int(skill_modifiers[i]) >= 0 else '') + skill_modifiers[i])        
         add_custom_data('Check Box ' + str(i+23),'Yes')
         filled.append(i)
@@ -136,7 +146,7 @@ def skill_modifiers(ability_modifiers,proficiency_modifier):
   # skills without proficiency
   for i in range(0,len(skills)):
     if not i in filled:
-        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]))
+        skill_modifiers[i] = str(int(ability_modifiers[abilities_for_skills[i]]) + other_skill_modifiers[i])
         add_custom_data(skills[i], ('+' if int(skill_modifiers[i]) >= 0 else '') + skill_modifiers[i])
 
   # passive perception
@@ -163,6 +173,20 @@ def saving_throws(ability_modifiers,proficiency_modifier):
 
 def features_and_traits(xml):
   # Feat+Traits - page 2
+  age = xml.find('./character/race/age')
+  height = xml.find('./character/race/height')
+  weight = xml.find('./character/race/weight')
+  eyes = xml.find('./character/race/eyes')
+  skin = xml.find('./character/race/skin')
+  hair = xml.find('./character/race/hair')
+      
+  add_custom_data('Age', age.text)
+  add_custom_data('Height', height.text)
+  add_custom_data('Weight', weight.text)
+  add_custom_data('Eyes', eyes.text)
+  add_custom_data('Skin', skin.text)
+  add_custom_data('Hair', hair.text)
+
   feat_text = ''
   feats = xml.findall('./character/class/feat') + xml.findall('./character/race/feat')
   for feat in feats:
@@ -180,6 +204,71 @@ def features_and_traits(xml):
       feat_text+= feat.find('name').text + ':\r\n' + feat.find('text').text.replace('•','\r\n•')+"\r\n"
 
   add_custom_data('Features and Traits',feat_text.strip())
+
+def treasure(xml):
+  # Treasure - page 2
+  item_text = ''
+  armor_text = ''
+  treasure = xml.findall('./character/item')
+  for item in treasure:
+      slot = item.find('slot')
+
+      # hack: money
+      if item.find('name').text == "Copper (cp)":
+        add_custom_data('CP',item.find('quantity').text)
+      if item.find('name').text == "Silver (sp)":
+        add_custom_data('SP',item.find('quantity').text)
+      if item.find('name').text == "Electrum (ep)":
+        add_custom_data('EP',item.find('quantity').text)
+      elif item.find('name').text == "Gold (gp)":
+        add_custom_data('GP',item.find('quantity').text)
+      elif item.find('name').text == "Platinum (pp)":
+        add_custom_data('PP',item.find('quantity').text)
+      # Equipped armor
+      elif slot is not None and slot.text == '5':
+        armor_text += item.find('name').text  + ", "
+        global armor
+        armor = int(item.find('ac').text)
+        global armor_type
+        armor_type = int(item.find('type').text)
+
+      else:
+        item_amount = item.find('quantity')
+        if item_amount is not None:
+            item_amount = item_amount.text
+        else:
+            item_amount = '1'
+
+        if int(item_amount) > 1:
+            item_text += "({}x) ".format(item_amount) 
+        item_text += item.find('name').text  + ", "
+
+  item_text = item_text[:-2]
+  armor_text = armor_text[:-2]
+  add_custom_data('Treasure',item_text.strip())
+  add_custom_data('Equipment',armor_text.strip())
+
+def armor_class(xml, ability_modifiers):
+    # TODO: Shield
+    # TODO: Special class ACs and such (Unarmored defence, monks)
+    # TODO: Disadvantages?
+    armor_class = 10
+
+    if armor != 0:
+        if armor_type == 1:
+            # type 1 light armor
+            armor_class = armor + ability_modifiers[1]
+        elif armor_type == 2:
+            # type 2 medium armor (max dex 2)
+            dex_mod = min(2, ability_modifiers[1])
+            armor_class = armor + dex_mod
+        else:
+            # type 3 heavy armor (no dex mod) 
+            armor_class = armor
+    else:
+        armor_class = 10 + ability_modifiers[1]
+
+    add_custom_data('AC', armor_class)
 
 def simple_fields(xml):
   with open('simple-field-mapping.csv', newline='') as csvfile:
@@ -210,6 +299,8 @@ def process_xml(file):
   # TODO: Add all feats, not just first. Can work out how many per page based on length.
   # TODO: Calculate bonuses given from feats.
   features_and_traits(xml)
+  treasure(xml)
+  armor_class(xml, ability_modifiers)
 
 
 def form_fill(fields):
