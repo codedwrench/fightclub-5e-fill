@@ -8,7 +8,7 @@ import re
 
 sys.path.insert(0, os.getcwd())
 filename_prefix = "NVC"
-name = "Tinsai Retsener"
+name = "Dda"
 xml_file = name + ".xml"
 pdf_file = "Blank_Character_Sheet.pdf"
 tmp_file = "tmp.fdf"
@@ -60,13 +60,21 @@ def append_custom_data(field_name, data, delimiter):
   fields[field_name]+=delimiter+data
 
 def character_info(xml):
-  global level, player_class
-  # TODO: multiclass support
-  # hack: <level> node is missing for level 1s.
-  level = str(xml.find('./character/class/level').text) if not xml.find('./character/class/level') == None else 1
-  player_class = str(xml.find('./character/class/name').text)
+  global level
+  level = 0
+  class_and_level_string = ''
+  character_classes = xml.findall('./character/class')
+  for character_class in character_classes:
+      class_level = int(find_field_or_return_default(character_class, './level', "1"))
+      level += class_level
+
+      # Deprived shouldn't actually happen here, a class should always exist
+      player_class = find_field_or_return_default(character_class, './name', "Deprived")
+      class_and_level_string += 'Lv ' + str(class_level) + ' ' + player_class + ', '
+
   
-  add_custom_data('ClassLevel','Level ' + str(level) + ' ' + player_class)
+  class_and_level_string = class_and_level_string[:-2]
+  add_custom_data('ClassLevel', class_and_level_string)
   add_custom_data('PlayerName',player_name)
   add_custom_data('Alignment',alignment)
 
@@ -423,22 +431,11 @@ def hit_die(xml):
 
     character_classes = xml.findall('./character/class')
     for character_class in character_classes:
-        level = character_class.find('level')
-        hd = character_class.find('hd')
+        hd = find_field_or_return_default(character_class, 'hd', '1')
+        level = find_field_or_return_default(character_class, 'level', '1')
+        hit_die_text += level + hit_die_type_to_dice_type(hd) + "+"
 
-        if hd == None:
-            hd = "1"
-        else:
-            hd = hd.text
-
-        if level == None:
-            level = "1"
-        else:
-            level = level.text
-
-        hit_die_text = level + hit_die_type_to_dice_type(hd) + " + "
-
-    hit_die_text = hit_die_text[:3]
+    hit_die_text = hit_die_text[:-1]
     add_custom_data('HDTotal', hit_die_text.strip())
 
 
